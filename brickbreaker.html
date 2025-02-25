@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Galactic Brick Breaker</title>
+        <!-- Tailwind CSS CDN -->
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+            body {
+                background: url("https://images.unsplash.com/photo-1447433589675-4aaa569f3e05?q=80&w=1480&auto=format&fit=crop")
+                    no-repeat center center fixed;
+                background-size: cover;
+            }
+            .game-container {
+                background: rgba(
+                    0,
+                    0,
+                    0,
+                    0.7
+                ); /* Semi-transparent black for contrast */
+                border: 4px solid #a0aec0; /* Gray-400 */
+                border-radius: 12px;
+                padding: 20px;
+                box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+            }
+            canvas {
+                border: 2px solid #e2e8f0; /* Gray-200 */
+                background: rgba(255, 255, 255, 0.1); /* Slight transparency */
+                border-radius: 8px;
+            }
+            .bullet {
+                width: 8px;
+                height: 20px;
+                background: #ed8936; /* Orange-500 */
+                border-radius: 4px;
+                box-shadow: 0 0 5px #ed8936;
+            }
+        </style>
+    </head>
+    <body class="flex items-center justify-center min-h-screen">
+        <div class="game-container max-w-lg w-full text-center text-white">
+            <h1 class="text-4xl font-bold mb-4">Galactic Brick Breaker</h1>
+            <div class="flex justify-between mb-4 px-4">
+                <div class="text-lg font-semibold">
+                    Score: <span id="score">0</span>
+                </div>
+                <div class="text-lg font-semibold">
+                    Lives: <span id="lives">3</span>
+                </div>
+                <div class="text-lg font-semibold">
+                    Level: <span id="level">1</span>
+                </div>
+            </div>
+            <div class="relative">
+                <canvas id="gameCanvas" width="480" height="320"></canvas>
+                <!-- Bullets on sides -->
+                <div class="absolute top-0 left-4 flex flex-col gap-2">
+                    <div class="bullet"></div>
+                    <div class="bullet"></div>
+                </div>
+                <div class="absolute top-0 right-4 flex flex-col gap-2">
+                    <div class="bullet"></div>
+                    <div class="bullet"></div>
+                </div>
+            </div>
+            <p class="mt-4 text-gray-300">
+                Use ← and → keys to move the spaceship. Destroy all asteroids!
+            </p>
+        </div>
+
+        <script>
+            // Get canvas and context
+            const canvas = document.getElementById("gameCanvas");
+            const ctx = canvas.getContext("2d");
+            const scoreDisplay = document.getElementById("score");
+            const livesDisplay = document.getElementById("lives");
+            const levelDisplay = document.getElementById("level");
+
+            // Game variables
+            const ballRadius = 10;
+            let x = canvas.width / 2;
+            let y = canvas.height - 30;
+            let dx = 2;
+            let dy = -2;
+
+            const paddleHeight = 12;
+            const paddleWidth = 80;
+            let paddleX = (canvas.width - paddleWidth) / 2;
+
+            let score = 0;
+            let lives = 3;
+            let level = 1;
+            let rightPressed = false;
+            let leftPressed = false;
+
+            // Brick levels configuration
+            const levels = {
+                1: { rows: 3, cols: 5 },
+                2: { rows: 4, cols: 6 },
+                3: { rows: 5, cols: 7 },
+            };
+            let brickRowCount = levels[level].rows;
+            let brickColumnCount = levels[level].cols;
+            const brickWidth = 70;
+            const brickHeight = 20;
+            const brickPadding = 10;
+            const brickOffsetTop = 40;
+            const brickOffsetLeft = 30;
+
+            // Initialize bricks
+            let bricks = [];
+            function initBricks() {
+                bricks = [];
+                for (let c = 0; c < brickColumnCount; c++) {
+                    bricks[c] = [];
+                    for (let r = 0; r < brickRowCount; r++) {
+                        bricks[c][r] = { x: 0, y: 0, status: 1 };
+                    }
+                }
+            }
+            initBricks();
+
+            // Event listeners for paddle movement
+            document.addEventListener("keydown", keyDownHandler);
+            document.addEventListener("keyup", keyUpHandler);
+
+            function keyDownHandler(e) {
+                if (e.key === "Right" || e.key === "ArrowRight")
+                    rightPressed = true;
+                else if (e.key === "Left" || e.key === "ArrowLeft")
+                    leftPressed = true;
+            }
+
+            function keyUpHandler(e) {
+                if (e.key === "Right" || e.key === "ArrowRight")
+                    rightPressed = false;
+                else if (e.key === "Left" || e.key === "ArrowLeft")
+                    leftPressed = false;
+            }
+
+            // Draw functions with cosmic theme
+            function drawBall() {
+                ctx.beginPath();
+                ctx.arc(x, y, ballRadius, 0, Math.PI * 2);
+                const gradient = ctx.createRadialGradient(
+                    x,
+                    y,
+                    2,
+                    x,
+                    y,
+                    ballRadius,
+                );
+                gradient.addColorStop(0, "#fbd38d"); // Orange-200
+                gradient.addColorStop(1, "#ed8936"); // Orange-500
+                ctx.fillStyle = gradient;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = "rgba(237, 137, 54, 0.7)";
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.closePath();
+            }
+
+            function drawPaddle() {
+                ctx.beginPath();
+                ctx.rect(
+                    paddleX,
+                    canvas.height - paddleHeight,
+                    paddleWidth,
+                    paddleHeight,
+                );
+                const gradient = ctx.createLinearGradient(
+                    paddleX,
+                    0,
+                    paddleX + paddleWidth,
+                    0,
+                );
+                gradient.addColorStop(0, "#4a5568"); // Gray-700
+                gradient.addColorStop(1, "#a0aec0"); // Gray-400
+                ctx.fillStyle = gradient;
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = "rgba(160, 174, 192, 0.5)";
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.closePath();
+            }
+
+            function drawBricks() {
+                for (let c = 0; c < brickColumnCount; c++) {
+                    for (let r = 0; r < brickRowCount; r++) {
+                        if (bricks[c][r].status === 1) {
+                            const brickX =
+                                c * (brickWidth + brickPadding) +
+                                brickOffsetLeft;
+                            const brickY =
+                                r * (brickHeight + brickPadding) +
+                                brickOffsetTop;
+                            bricks[c][r].x = brickX;
+                            bricks[c][r].y = brickY;
+                            ctx.beginPath();
+                            ctx.rect(brickX, brickY, brickWidth, brickHeight);
+                            const gradient = ctx.createLinearGradient(
+                                brickX,
+                                brickY,
+                                brickX,
+                                brickY + brickHeight,
+                            );
+                            gradient.addColorStop(0, "#b2f5ea"); // Teal-200
+                            gradient.addColorStop(1, "#319795"); // Teal-600
+                            ctx.fillStyle = gradient;
+                            ctx.shadowBlur = 5;
+                            ctx.shadowColor = "rgba(49, 151, 149, 0.4)";
+                            ctx.fill();
+                            ctx.shadowBlur = 0;
+                            ctx.closePath();
+                        }
+                    }
+                }
+            }
+
+            // Update UI
+            function updateUI() {
+                scoreDisplay.textContent = score;
+                livesDisplay.textContent = lives;
+                levelDisplay.textContent = level;
+            }
+
+            // Collision detection
+            function collisionDetection() {
+                for (let c = 0; c < brickColumnCount; c++) {
+                    for (let r = 0; r < brickRowCount; r++) {
+                        const b = bricks[c][r];
+                        if (b.status === 1) {
+                            if (
+                                x > b.x &&
+                                x < b.x + brickWidth &&
+                                y > b.y &&
+                                y < b.y + brickHeight
+                            ) {
+                                dy = -dy;
+                                b.status = 0;
+                                score += 10;
+                                updateUI();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Reset ball
+            function resetBall() {
+                x = canvas.width / 2;
+                y = canvas.height - 30;
+                dx = 2 + level * 0.5; // Slight speed increase per level
+                dy = -(2 + level * 0.5);
+            }
+
+            // Next level
+            function nextLevel() {
+                level++;
+                if (level > 3) {
+                    alert(
+                        `Congratulations! You conquered all levels! Final Score: ${score}`,
+                    );
+                    document.location.reload();
+                    return true;
+                }
+                brickRowCount = levels[level].rows;
+                brickColumnCount = levels[level].cols;
+                initBricks();
+                resetBall();
+                updateUI();
+                return false;
+            }
+
+            // Game loop
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawBricks();
+                drawBall();
+                drawPaddle();
+                collisionDetection();
+
+                // Ball movement and collision
+                if (x + dx > canvas.width - ballRadius || x + dx < ballRadius)
+                    dx = -dx;
+                if (y + dy < ballRadius) dy = -dy;
+                else if (y + dy > canvas.height - ballRadius) {
+                    if (x > paddleX && x < paddleX + paddleWidth) {
+                        dy = -dy;
+                    } else {
+                        lives--;
+                        updateUI();
+                        if (lives <= 0) {
+                            alert(
+                                `Game Over! Final Score: ${score}. Reload to play again.`,
+                            );
+                            document.location.reload();
+                            return;
+                        } else {
+                            resetBall();
+                        }
+                    }
+                }
+
+                // Paddle movement
+                if (rightPressed && paddleX < canvas.width - paddleWidth)
+                    paddleX += 7;
+                else if (leftPressed && paddleX > 0) paddleX -= 7;
+
+                x += dx;
+                y += dy;
+
+                // Check win condition for current level
+                const remainingBricks = bricks
+                    .flat()
+                    .filter((b) => b.status === 1).length;
+                if (remainingBricks === 0) {
+                    if (nextLevel()) return;
+                }
+
+                requestAnimationFrame(draw);
+            }
+
+            // Start the game
+            updateUI();
+            draw();
+        </script>
+    </body>
+</html>
